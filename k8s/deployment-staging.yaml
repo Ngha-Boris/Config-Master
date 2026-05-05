@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: config-master-app
+  namespace: staging
+  labels:
+    app: config-master-app
+    environment: staging
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: config-master-app
+      environment: staging
+  template:
+    metadata:
+      labels:
+        app: config-master-app
+        environment: staging
+    spec:
+      containers:
+        - name: app
+          image: config-master-app:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: app-config
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "100m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 3
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: config-master-app-service
+  namespace: staging
+  labels:
+    app: config-master-app
+    environment: staging
+spec:
+  selector:
+    app: config-master-app
+    environment: staging
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 3000
+  type: NodePort

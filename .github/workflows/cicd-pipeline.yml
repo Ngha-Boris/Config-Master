@@ -1,0 +1,182 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+env:
+  DOCKER_IMAGE: config-master-app
+  REGISTRY: ghcr.io
+
+jobs:
+  # ==========================================
+  # BUILD & TEST
+  # ==========================================
+  build:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          load: true
+          tags: ${{ env.DOCKER_IMAGE }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      
+      - name: Test Docker image
+        run: |
+          # Run container with staging environment
+          docker run -d --name test-staging -p 3000:3000 -e APP_ENV=staging ${{ env.DOCKER_IMAGE }}:${{ github.sha }}
+          sleep 5
+          
+          # Test health endpoint
+          curl -s http://localhost:3000/health | grep '"status":"healthy"'
+          
+          # Verify staging shows blue
+          curl -s http://localhost:3000/ | grep -q '#0d6efd'
+          echo "✅ Staging (blue) verified"
+          
+          docker stop test-staging && docker rm test-staging
+      
+      - name: Save Docker image as artifact
+        run: |
+          docker save ${{ env.DOCKER_IMAGE }}:${{ github.sha }} > ${{ env.DOCKER_IMAGE }}-${{ github.sha }}.tar
+      
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image
+          path: ${{ env.DOCKER_IMAGE }}-${{ github.sha }}.tar
+          retention-days: 1
+
+  # ==========================================
+  # STAGING DEPLOYMENT (Automatic)
+  # ==========================================
+  deploy-staging:
+    name: Deploy to Staging
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: ${{ steps.deploy.outputs.url }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Download Docker image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+      
+      - name: Load Docker image
+        run: |
+          docker load < ${{ env.DOCKER_IMAGE }}-${{ github.sha }}.tar
+          docker tag ${{ env.DOCKER_IMAGE }}:${{ github.sha }} ${{ env.DOCKER_IMAGE }}:latest
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.6.0"
+      
+      - name: Terraform Init
+        working-directory: ./terraform
+        run: terraform init
+      
+      - name: Select/Create Staging Workspace
+        working-directory: ./terraform
+        run: |
+          terraform workspace select staging || terraform workspace new staging
+      
+      - name: Terraform Plan
+        working-directory: ./terraform
+        run: terraform plan -var="docker_image=${{ env.DOCKER_IMAGE }}:${{ github.sha }}" -out=tfplan
+      
+      - name: Terraform Apply
+        working-directory: ./terraform
+        run: terraform apply -auto-approve tfplan
+      
+      - name: Verify Staging Deployment
+        working-directory: ./terraform
+        run: |
+          echo "Deployed to workspace: $(terraform output -raw environment)"
+          echo "Namespace: $(terraform output -raw namespace)"
+          echo "APP_ENV: $(terraform output -raw app_env_value)"
+          echo "✅ Staging deployment complete - should show BLUE UI"
+
+  # ==========================================
+  # PRODUCTION DEPLOYMENT (Manual Approval Required)
+  # ==========================================
+  deploy-production:
+    name: Deploy to Production
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.url }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Download Docker image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+      
+      - name: Load Docker image
+        run: |
+          docker load < ${{ env.DOCKER_IMAGE }}-${{ github.sha }}.tar
+          docker tag ${{ env.DOCKER_IMAGE }}:${{ github.sha }} ${{ env.DOCKER_IMAGE }}:latest
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.6.0"
+      
+      - name: Terraform Init
+        working-directory: ./terraform
+        run: terraform init
+      
+      - name: Select/Create Production Workspace
+        working-directory: ./terraform
+        run: |
+          terraform workspace select production || terraform workspace new production
+      
+      - name: Terraform Plan
+        working-directory: ./terraform
+        run: terraform plan -var="docker_image=${{ env.DOCKER_IMAGE }}:${{ github.sha }}" -out=tfplan
+      
+      - name: Terraform Apply
+        working-directory: ./terraform
+        run: terraform apply -auto-approve tfplan
+      
+      - name: Verify Production Deployment
+        working-directory: ./terraform
+        run: |
+          echo "Deployed to workspace: $(terraform output -raw environment)"
+          echo "Namespace: $(terraform output -raw namespace)"
+          echo "APP_ENV: $(terraform output -raw app_env_value)"
+          echo "✅ Production deployment complete - should show RED UI"
+      
+      - name: Deployment Summary
+        run: |
+          echo "🎉 Full deployment pipeline complete!"
+          echo "   Staging: BLUE UI (auto-deployed)"
+          echo "   Production: RED UI (manual approval)"
