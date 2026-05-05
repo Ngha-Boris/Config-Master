@@ -93,13 +93,16 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: "1.15.0"
+          terraform_version: "1.9.0"
+      
+      - name: Create kind Cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: config-master-cluster
       
       - name: Terraform Init
         working-directory: ./terraform
         run: terraform init
-        env:
-          TF_DISABLE_PROVIDER_SIGNATURE_VERIFICATION: "true"
       
       - name: Select/Create Staging Workspace
         working-directory: ./terraform
@@ -150,13 +153,16 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: "1.15.0"
+          terraform_version: "1.9.0"
+      
+      - name: Create kind Cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: config-master-cluster
       
       - name: Terraform Init
         working-directory: ./terraform
         run: terraform init
-        env:
-          TF_DISABLE_PROVIDER_SIGNATURE_VERIFICATION: "true"
       
       - name: Select/Create Production Workspace
         working-directory: ./terraform
