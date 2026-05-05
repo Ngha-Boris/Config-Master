@@ -100,6 +100,10 @@ jobs:
         with:
           cluster_name: config-master-cluster
       
+      - name: Load image into kind
+        run: |
+          kind load docker-image ${{ env.DOCKER_IMAGE }}:${{ github.sha }} --name config-master-cluster
+      
       - name: Terraform Init
         working-directory: ./terraform
         run: terraform init
@@ -159,6 +163,10 @@ jobs:
         uses: helm/kind-action@v1
         with:
           cluster_name: config-master-cluster
+      
+      - name: Load image into kind
+        run: |
+          kind load docker-image ${{ env.DOCKER_IMAGE }}:${{ github.sha }} --name config-master-cluster
       
       - name: Terraform Init
         working-directory: ./terraform
