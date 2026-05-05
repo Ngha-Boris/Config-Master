@@ -113,6 +113,7 @@ resource "kubernetes_deployment" "app" {
         container {
           name  = "app"
           image = var.docker_image
+          image_pull_policy = var.image_pull_policy
           
           port {
             container_port = 3000

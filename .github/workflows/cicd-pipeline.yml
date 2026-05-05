@@ -111,11 +111,11 @@ jobs:
       - name: Select/Create Staging Workspace
         working-directory: ./terraform
         run: |
-          terraform workspace select staging || terraform workspace new staging
+          terraform workspace select -or-create staging
       
       - name: Terraform Plan
         working-directory: ./terraform
-        run: terraform plan -var="docker_image=${{ env.DOCKER_IMAGE }}:${{ github.sha }}" -out=tfplan
+        run: terraform plan -var="docker_image=${{ env.DOCKER_IMAGE }}:${{ github.sha }}" -var="image_pull_policy=IfNotPresent" -out=tfplan
       
       - name: Terraform Apply
         working-directory: ./terraform
@@ -175,11 +175,11 @@ jobs:
       - name: Select/Create Production Workspace
         working-directory: ./terraform
         run: |
-          terraform workspace select production || terraform workspace new production
+          terraform workspace select -or-create production
       
       - name: Terraform Plan
         working-directory: ./terraform
-        run: terraform plan -var="docker_image=${{ env.DOCKER_IMAGE }}:${{ github.sha }}" -out=tfplan
+        run: terraform plan -var="docker_image=${{ env.DOCKER_IMAGE }}:${{ github.sha }}" -var="image_pull_policy=IfNotPresent" -out=tfplan
       
       - name: Terraform Apply
         working-directory: ./terraform
